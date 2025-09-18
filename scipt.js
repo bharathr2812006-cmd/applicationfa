@@ -1,7 +1,7 @@
-const registerForm = document.getElementById('register-form');
+
 const loginForm = document.getElementById('login-form');
 
-const showRegisterLink = document.getElementById('show-register');
+
 const showLoginLink = document.getElementById('show-login');
 
 // Toggle between login and register forms
@@ -13,13 +13,11 @@ showRegisterLink.addEventListener('click', function(e) {
 
 showLoginLink.addEventListener('click', function(e) {
   e.preventDefault();
-  registerForm.classList.add('hidden');
+  
   loginForm.classList.remove('hidden');
 });
 
 // Handle register submission
-registerForm.addEventListener('submit', function(e) {
-  e.preventDefault();
 
   // Collect registration data
   const username = document.getElementById('reg-username').value.trim();
