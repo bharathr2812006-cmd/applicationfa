@@ -1,78 +1,135 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+// Simple Registration/Login System with Dashboard in plain JS
 
-const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+// Elements
+const container = document.getElementById('app');
 
-const JWT_SECRET = 'your_jwt_secret_key'; // Change to env var in production
+let users = JSON.parse(localStorage.getItem('users') || '[]');
+let currentUser  = JSON.parse(sessionStorage.getItem('currentUser ') || 'null');
 
-// Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/userdb', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+function saveUsers() {
+  localStorage.setItem('users', JSON.stringify(users));
+}
 
-// User schema
-const userSchema = new mongoose.Schema({
-  username: { type: String, unique: true },
-  password: String,
-});
+function saveCurrentUser () {
+  sessionStorage.setItem('currentUser ', JSON.stringify(currentUser ));
+}
 
-const User = mongoose.model('User ', userSchema);
+function clearCurrentUser () {
+  sessionStorage.removeItem('currentUser ');
+  currentUser  = null;
+}
 
-// Register endpoint
-app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: 'Missing fields' });
+function renderLogin() {
+  container.innerHTML = `
+    <h2>Login</h2>
+    <form id="loginForm">
+      <label>Username:<br><input type="text" id="loginUsername" required></label><br><br>
+      <label>Password:<br><input type="password" id="loginPassword" required></label><br><br>
+      <button type="submit">Login</button>
+    </form>
+    <p>Don't have an account? <a href="#" id="goRegister">Register here</a></p>
+    <p id="loginError" style="color:red;"></p>
+  `;
 
-  const existingUser  = await User.findOne({ username });
-  if (existingUser ) return res.status(400).json({ message: 'User  already exists' });
+  document.getElementById('goRegister').addEventListener('click', e => {
+    e.preventDefault();
+    renderRegister();
+  });
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = new User({ username, password: hashedPassword });
-  await user.save();
+  document.getElementById('loginForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
 
-  res.json({ message: 'User  registered successfully' });
-});
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      currentUser  = user;
+      saveCurrentUser ();
+      renderDashboard();
+    } else {
+      document.getElementById('loginError').textContent = 'Invalid username or password';
+    }
+  });
+}
 
-// Login endpoint
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await User.findOne({ username });
-  if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+function renderRegister() {
+  container.innerHTML = `
+    <h2>Register</h2>
+    <form id="registerForm">
+      <label>Username:<br><input type="text" id="regUsername" required></label><br><br>
+      <label>Email:<br><input type="email" id="regEmail" required></label><br><br>
+      <label>Password:<br><input type="password" id="regPassword" required></label><br><br>
+      <button type="submit">Register</button>
+    </form>
+    <p>Already have an account? <a href="#" id="goLogin">Login here</a></p>
+    <p id="registerError" style="color:red;"></p>
+  `;
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+  document.getElementById('goLogin').addEventListener('click', e => {
+    e.preventDefault();
+    renderLogin();
+  });
 
-  const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token });
-});
+  document.getElementById('registerForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const username = document.getElementById('regUsername').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
 
-// Middleware to verify JWT
-const authMiddleware = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Unauthorized' });
+    if (users.find(u => u.username === username)) {
+      document.getElementById('registerError').textContent = 'Username already exists';
+      return;
+    }
+    if (users.find(u => u.email === email)) {
+      document.getElementById('registerError').textContent = 'Email already registered';
+      return;
+    }
+    if (password.length < 6) {
+      document.getElementById('registerError').textContent = 'Password must be at least 6 characters';
+      return;
+    }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    res.status(401).json({ message: 'Invalid token' });
-  }
-};
+    const newUser  = {
+      id: Date.now(),
+      username,
+      email,
+      password,
+      registeredAt: new Date().toLocaleDateString()
+    };
+    users.push(newUser );
+    saveUsers();
 
-// Get total registered users (protected)
-app.get('/api/users/count', authMiddleware, async (req, res) => {
-  const count = await User.countDocuments();
-  res.json({ count });
-});
+    currentUser  = newUser ;
+    saveCurrentUser ();
+    renderDashboard();
+  });
+}
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+function renderDashboard() {
+  container.innerHTML = `
+    <h2>Dashboard</h2>
+    <p>Welcome, <strong>${currentUser .username}</strong>!</p>
+    <p>Total registered users: <strong>${users.length}</strong></p>
+    <p>Your registration date: <strong>${currentUser .registeredAt}</strong></p>
+    <h3>Recent Registered Users</h3>
+    <ul id="recentUsers"></ul>
+    <button id="logoutBtn">Logout</button>
+  `;
+
+  const recentUsersList = document.getElementById('recentUsers');
+  const recentUsers = users.slice(-5).reverse();
+  recentUsersList.innerHTML = recentUsers.map(u => `<li>${u.username} (${u.email}) - Registered: ${u.registeredAt}</li>`).join('');
+
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    clearCurrentUser ();
+    renderLogin();
+  });
+}
+
+// Initial render
+if (currentUser ) {
+  renderDashboard();
+} else {
+  renderLogin();
+}
 
